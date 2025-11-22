@@ -8,7 +8,6 @@ import React, {
   useState,
 } from "react";
 import { useUserData } from "../hooks/useUserData.js";
-import { postUser } from "../api/client.js";
 
 const UserDataContext = createContext(null);
 
@@ -17,27 +16,30 @@ export function UserDataProvider({ children }) {
   const [userIdJustChanged, setUserIdJustChanged] = useState(null);
   const [hasRequestedNotification, setHasRequestedNotification] =
     useState(false);
-  const { data, isLoading, error, isOffline } = useUserData(userId, 1000);
+
+  const { data, setData, isLoading, error, isOffline } = useUserData(
+    userId,
+    1000
+  );
+
   const lastNoteRef = useRef(null);
 
-  // Load saved ID at startup
+  // Load stored ID on startup
   useEffect(() => {
-    const saved = localStorage.getItem("sensus_user_id");
+    const saved = window.localStorage.getItem("sensus_user_id");
     if (saved) setUserId(saved);
   }, []);
 
-  // When userId changes, persist & ensure it exists
+  // Whenever userId changes, persist it and show confirmation pill
   useEffect(() => {
     if (!userId) return;
 
-    localStorage.setItem("sensus_user_id", userId);
+    window.localStorage.setItem("sensus_user_id", userId);
 
     setUserIdJustChanged(userId);
     const timer = setTimeout(() => setUserIdJustChanged(null), 2000);
 
-    // Important: do NOT override spectator data — empty POST only if new user
-    postUser(userId, {}); // merge-safe post
-
+    // No POST here — creation is handled by createUserIfNotExists in the hook
     return () => clearTimeout(timer);
   }, [userId]);
 
@@ -54,18 +56,19 @@ export function UserDataProvider({ children }) {
     }
   }, [data]);
 
+  const value = {
+    userId,
+    setUserId,
+    userData: data,
+    setUserData: setData, // expose setter so pages can intentionally update local state
+    isLoading,
+    error,
+    isOffline,
+    userIdJustChanged,
+  };
+
   return (
-    <UserDataContext.Provider
-      value={{
-        userId,
-        setUserId,
-        userData: data,
-        isLoading,
-        error,
-        isOffline,
-        userIdJustChanged,
-      }}
-    >
+    <UserDataContext.Provider value={value}>
       {children}
     </UserDataContext.Provider>
   );
@@ -80,8 +83,8 @@ function notifyNote(noteName, setHasRequestedNotification) {
   }
 
   if (Notification.permission === "default") {
-    setHasRequestedNotification((req) => {
-      if (req) return req;
+    setHasRequestedNotification((requested) => {
+      if (requested) return requested;
 
       Notification.requestPermission().then((perm) => {
         if (perm === "granted") {
@@ -96,6 +99,7 @@ function notifyNote(noteName, setHasRequestedNotification) {
 
 export function useUserDataContext() {
   const ctx = useContext(UserDataContext);
-  if (!ctx) throw new Error("useUserDataContext must be used inside provider");
+  if (!ctx)
+    throw new Error("useUserDataContext must be used inside UserDataProvider");
   return ctx;
 }
