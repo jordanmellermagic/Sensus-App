@@ -13,15 +13,15 @@ export function useUserData(userId, intervalMs = 1000) {
   useEffect(() => {
     let cancelled = false;
 
-    async function fetchInitial() {
+    async function loadInitial() {
       if (!userId) {
         setData(null);
-        setError(null);
         return;
       }
+
       setIsLoading(true);
+
       try {
-        // Ensure the user exists (creates if missing)
         const result = await createUserIfNotExists(userId);
         if (!cancelled) {
           setData(result);
@@ -38,9 +38,10 @@ export function useUserData(userId, intervalMs = 1000) {
       }
     }
 
-    fetchInitial();
+    loadInitial();
 
     if (intervalRef.current) clearInterval(intervalRef.current);
+
     if (userId) {
       intervalRef.current = setInterval(async () => {
         try {
