@@ -18,7 +18,8 @@ function computeDaysAliveFromBirthday(birthdayStr) {
 
 export default function SpectatorDataPage() {
   const navigate = useNavigate();
-  const { userId, userData, error, isOffline } = useUserDataContext();
+  const { userId, userData, setUserData, error, isOffline } =
+    useUserDataContext();
   const [cleared, setCleared] = useState(false);
 
   const addresses = useMemo(() => {
@@ -37,28 +38,30 @@ export default function SpectatorDataPage() {
   const clearSpectatorData = async () => {
     if (!userId || !userData) return;
 
-    const updated = {
-      // clear spectator fields
+    const spectatorCleared = {
       first_name: "",
       last_name: "",
       phone_number: "",
       birthday: "",
       days_alive: 0,
       address: "",
-
-      // keep these exactly as they are
-      note_name: userData.note_name || "",
-      screenshot_base64: userData.screenshot_base64 || "",
-      command: userData.command || "",
     };
 
+    // Update backend (merge-safe postUser will include other fields)
     try {
-      await postUser(userId, updated);
-      setCleared(true);
-      setTimeout(() => setCleared(false), 2000);
+      await postUser(userId, spectatorCleared);
     } catch (err) {
-      console.error("Failed to clear spectator data:", err);
+      console.error("Failed to clear spectator data on server:", err);
+      // Even if backend fails, we still clear locally for now.
     }
+
+    // Update local state explicitly so the UI reflects the cleared values
+    setUserData((prev) =>
+      prev ? { ...prev, ...spectatorCleared } : spectatorCleared
+    );
+
+    setCleared(true);
+    setTimeout(() => setCleared(false), 2000);
   };
 
   return (
