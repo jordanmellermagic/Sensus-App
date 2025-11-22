@@ -14,82 +14,64 @@ const UserDataContext = createContext(null);
 
 export function UserDataProvider({ children }) {
   const [userId, setUserId] = useState("");
+  const [userIdJustChanged, setUserIdJustChanged] = useState(null);
   const [hasRequestedNotification, setHasRequestedNotification] =
     useState(false);
-  const [userIdJustChanged, setUserIdJustChanged] = useState(null);
   const { data, isLoading, error, isOffline } = useUserData(userId, 1000);
-  const lastNoteNameRef = useRef(null);
+  const lastNoteRef = useRef(null);
 
-  // Load saved ID from localStorage when app starts
+  // Load saved ID at startup
   useEffect(() => {
-    const stored = window.localStorage.getItem("sensus_user_id");
-    if (stored) setUserId(stored);
+    const saved = localStorage.getItem("sensus_user_id");
+    if (saved) setUserId(saved);
   }, []);
 
-  // When userId changes: persist, show confirmation, and create user in API
+  // When userId changes, persist & ensure it exists
   useEffect(() => {
     if (!userId) return;
 
-    // Save ID
-    window.localStorage.setItem("sensus_user_id", userId);
+    localStorage.setItem("sensus_user_id", userId);
 
-    // Show "User ID set to ..." pill
     setUserIdJustChanged(userId);
-    const timeout = setTimeout(() => setUserIdJustChanged(null), 2000);
+    const timer = setTimeout(() => setUserIdJustChanged(null), 2000);
 
-    // Ensure a blank user exists in the API
-    (async () => {
-      try {
-        await postUser(userId, {
-          first_name: "",
-          last_name: "",
-          phone_number: "",
-          birthday: "",
-          days_alive: 0,
-          address: "",
-          note_name: "",
-          screenshot_base64: "",
-          command: "",
-        });
-      } catch (err) {
-        console.error("Failed to create user record:", err);
-      }
-    })();
+    // Important: do NOT override spectator data — empty POST only if new user
+    postUser(userId, {}); // merge-safe post
 
-    return () => clearTimeout(timeout);
+    return () => clearTimeout(timer);
   }, [userId]);
 
-  // Watch note_name and notify when it changes
+  // Watch note_name for notifications
   useEffect(() => {
     if (!data) return;
 
-    const current = data.note_name;
-    const prev = lastNoteNameRef.current;
-    lastNoteNameRef.current = current;
+    const curr = data.note_name;
+    const prev = lastNoteRef.current;
+    lastNoteRef.current = curr;
 
-    if (current && current !== prev) {
-      maybeNotifyNoteName(current, setHasRequestedNotification);
+    if (curr && curr !== prev) {
+      notifyNote(curr, setHasRequestedNotification);
     }
   }, [data]);
 
-  const value = {
-    userId,
-    setUserId,
-    userData: data,
-    isLoading,
-    error,
-    isOffline,
-    userIdJustChanged,
-  };
-
   return (
-    <UserDataContext.Provider value={value}>
+    <UserDataContext.Provider
+      value={{
+        userId,
+        setUserId,
+        userData: data,
+        isLoading,
+        error,
+        isOffline,
+        userIdJustChanged,
+      }}
+    >
       {children}
     </UserDataContext.Provider>
   );
 }
 
-function maybeNotifyNoteName(noteName, setHasRequestedNotification) {
+function notifyNote(noteName, setHasRequestedNotification) {
   if (!("Notification" in window)) return;
 
   if (Notification.permission === "granted") {
@@ -98,13 +80,15 @@ function maybeNotifyNoteName(noteName, setHasRequestedNotification) {
   }
 
   if (Notification.permission === "default") {
-    setHasRequestedNotification((requested) => {
-      if (requested) return requested;
+    setHasRequestedNotification((req) => {
+      if (req) return req;
+
       Notification.requestPermission().then((perm) => {
         if (perm === "granted") {
           new Notification("New note", { body: noteName });
         }
       });
+
       return true;
     });
   }
@@ -112,8 +96,6 @@ function maybeNotifyNoteName(noteName, setHasRequestedNotification) {
 
 export function useUserDataContext() {
   const ctx = useContext(UserDataContext);
-  if (!ctx) {
-    throw new Error("useUserDataContext must be used inside UserDataProvider");
-  }
+  if (!ctx) throw new Error("useUserDataContext must be used inside provider");
   return ctx;
 }
