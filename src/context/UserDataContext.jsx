@@ -1,14 +1,23 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useUserData } from "../hooks/useUserData.js";
 
 const UserDataContext = createContext(null);
 
 export function UserDataProvider({ children }) {
   const [userId, setUserId] = useState("");
-  const [hasRequestedNotification, setHasRequestedNotification] = useState(false);
+  const [hasRequestedNotification, setHasRequestedNotification] =
+    useState(false);
+  const [userIdJustChanged, setUserIdJustChanged] = useState(null);
   const { data, isLoading, error, isOffline } = useUserData(userId, 1000);
   const lastNoteNameRef = useRef(null);
 
+  // Load userId from localStorage on mount
   useEffect(() => {
     const stored = window.localStorage.getItem("sensus_user_id");
     if (stored) {
@@ -16,20 +25,25 @@ export function UserDataProvider({ children }) {
     }
   }, []);
 
+  // Persist userId and show confirmation flag
   useEffect(() => {
     if (userId) {
       window.localStorage.setItem("sensus_user_id", userId);
+      setUserIdJustChanged(userId);
+      const t = setTimeout(() => setUserIdJustChanged(null), 2000);
+      return () => clearTimeout(t);
     }
   }, [userId]);
 
+  // Note name change notifications
   useEffect(() => {
-    if (!data || !data.note_name) return;
-
+    if (!data) return;
     const current = data.note_name;
     const prev = lastNoteNameRef.current;
     lastNoteNameRef.current = current;
 
-    if (prev && current !== prev) {
+    // Notify when note_name becomes non-empty OR changes between values
+    if (current && current !== prev) {
       maybeNotifyNoteName(current, setHasRequestedNotification);
     }
   }, [data]);
@@ -41,9 +55,14 @@ export function UserDataProvider({ children }) {
     isLoading,
     error,
     isOffline,
+    userIdJustChanged,
   };
 
-  return <UserDataContext.Provider value={value}>{children}</UserDataContext.Provider>;
+  return (
+    <UserDataContext.Provider value={value}>
+      {children}
+    </UserDataContext.Provider>
+  );
 }
 
 function maybeNotifyNoteName(noteName, setHasRequestedNotification) {
@@ -69,6 +88,7 @@ function maybeNotifyNoteName(noteName, setHasRequestedNotification) {
 
 export function useUserDataContext() {
   const ctx = useContext(UserDataContext);
-  if (!ctx) throw new Error("useUserDataContext must be used within UserDataProvider");
+  if (!ctx)
+    throw new Error("useUserDataContext must be used within UserDataProvider");
   return ctx;
 }
