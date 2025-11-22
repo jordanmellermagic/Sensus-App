@@ -36,25 +36,33 @@ export default function SpectatorDataPage() {
   // ------------------------------------------------------
   // CLEAR ONLY SPECTATOR-FACING FIELDS
   // ------------------------------------------------------
-  const clearSpectatorData = async () => {
-    if (!userId || !userData) return;
+const clearSpectatorData = async () => {
+  if (!userId || !userData) return;
 
-    const updated = {
-      ...userData,
+  const updated = {
+    _clearSpectator: true, // tells merge logic to overwrite spectator fields
+    first_name: "",
+    last_name: "",
+    phone_number: "",
+    birthday: "",
+    days_alive: 0,
+    address: "",
 
-      // 🔥 ONLY THESE ARE CLEARED:
-      first_name: "",
-      last_name: "",
-      phone_number: "",
-      birthday: "",
-      days_alive: 0,
-      address: "",
+    // keep these untouched
+    note_name: userData.note_name,
+    screenshot_base64: userData.screenshot_base64,
+    command: userData.command,
+  };
 
-      // 🔒 DO NOT CLEAR:
-      // note_name
-      // screenshot_base64
-      // command
-    };
+  try {
+    await postUser(userId, updated);
+    setCleared(true);
+    setTimeout(() => setCleared(false), 1800);
+  } catch (err) {
+    console.error("Failed to clear spectator data:", err);
+  }
+};
+
 
     try {
       await postUser(userId, updated);
