@@ -1,6 +1,32 @@
 import { useEffect, useRef, useState } from "react";
 import { getUser } from "../api/client.js";
 
+// helper: merge new data into old, keeping old non-empty values
+function mergeUserData(prev, next) {
+  if (!next) return prev;
+  if (!prev) return next;
+
+  const merged = { ...prev };
+
+  for (const key of Object.keys(next)) {
+    const newVal = next[key];
+    const oldVal = prev[key];
+
+    // For strings: if new is non-empty, use it; if empty, keep old
+    if (typeof newVal === "string") {
+      merged[key] = newVal.trim() !== "" ? newVal : oldVal;
+    } else if (newVal !== null && newVal !== undefined) {
+      // Non-string fields: always use new when defined
+      merged[key] = newVal;
+    } else {
+      // newVal null/undefined: keep old
+      merged[key] = oldVal;
+    }
+  }
+
+  return merged;
+}
+
 export function useUserData(userId, intervalMs = 1000) {
   const [data, setData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -21,9 +47,9 @@ export function useUserData(userId, intervalMs = 1000) {
       try {
         const result = await getUser(userId);
         if (!cancelled) {
-          setData(result);
+          setData((prev) => mergeUserData(prev, result));
           setError(null);
-          setIsOffline(false);
+          setIsOffline(!navigator.onLine ? true : false);
         }
       } catch (err) {
         if (!cancelled) {
