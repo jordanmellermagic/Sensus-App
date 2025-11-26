@@ -51,7 +51,7 @@ export default function SpectatorDataPage() {
 
   if (loading) {
     return (
-      <div className="w-full max-w-md mx-auto text-center text-neutral-400">
+      <div className="w-full max-w-md mx-auto pt-6 text-center text-neutral-400">
         Loading…
       </div>
     )
@@ -60,12 +60,11 @@ export default function SpectatorDataPage() {
   const birthdayText = data?.birthday || '—'
   const addressText = data?.address || 'No address on file.'
   const extras = computeExtras(data?.birthday)
-
   const hasExtras =
     !!extras.starSign || (extras.hasYear && (extras.daysAlive || extras.weekday))
 
   return (
-    <div className="w-full max-w-md mx-auto">
+    <div className="w-full max-w-md mx-auto pt-6">
       <div className="flex items-center justify-between mb-4">
         <button
           onClick={() => navigate('/')}

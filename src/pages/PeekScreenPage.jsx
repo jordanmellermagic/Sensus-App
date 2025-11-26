@@ -2,13 +2,14 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api.js'
 import { useAuth } from '../authContext.jsx'
+import { parseUrlInfo } from '../urlUtils.js'
 
 function usePollingData(userId, intervalMs = 1500) {
   const [noteData, setNoteData] = useState(null)
   const [screenData, setScreenData] = useState(null)
   const prevNoteRef = useRef(null)
   const prevScreenRef = useRef(null)
-  const [heroSource, setHeroSource] = useState(null) // 'note' | 'screen' | 'contact'
+  const [heroSource, setHeroSource] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -36,19 +37,14 @@ function usePollingData(userId, intervalMs = 1500) {
         if (noteChanged && !screenChanged) {
           setHeroSource('note')
         } else if (screenChanged && !noteChanged) {
-          // screen could be screenshot, url, or contact change
           setHeroSource('screen')
         } else if (noteChanged && screenChanged) {
-          // if both changed in same poll, prefer screen
           setHeroSource('screen')
         } else if (!heroSource) {
-          // initial hero guess
-          if (screen?.screenshot_path || screen?.url) {
+          if (screen?.screenshot_path || screen?.url || screen?.contact) {
             setHeroSource('screen')
           } else if (note?.note_name || note?.note_body) {
             setHeroSource('note')
-          } else if (screen?.contact) {
-            setHeroSource('contact')
           }
         }
 
@@ -90,6 +86,7 @@ export default function PeekScreenPage() {
   const touchStartRef = useRef(null)
   const [isTwoFingerGesture, setIsTwoFingerGesture] = useState(false)
   const { noteData, screenData, heroSource } = usePollingData(userId)
+  const tapTimeoutRef = useRef(null)
 
   const handlePointerDown = () => {
     setRevealing(true)
@@ -99,32 +96,42 @@ export default function PeekScreenPage() {
     setRevealing(false)
   }
 
-  const registerTap = async () => {
+  const registerTap = () => {
     const now = Date.now()
     const recent = tapTimes.filter((t) => now - t < 600)
     recent.push(now)
     setTapTimes(recent)
 
-    if (recent.length >= 3) {
-      setTapTimes([])
-      try {
-        await api.post(`/commands/${encodeURIComponent(userId)}`, {
-          command: 'finishEffect',
-        })
-        vibrate(60)
-      } catch (err) {
-        console.error('Failed to send finishEffect', err)
-      }
-    } else if (recent.length === 2) {
-      try {
-        await api.post(`/commands/${encodeURIComponent(userId)}`, {
-          command: 'screenshot',
-        })
-        vibrate(40)
-      } catch (err) {
-        console.error('Failed to send screenshot command', err)
-      }
+    if (tapTimeoutRef.current) {
+      clearTimeout(tapTimeoutRef.current)
+      tapTimeoutRef.current = null
     }
+
+    tapTimeoutRef.current = setTimeout(async () => {
+      const len = recent.length
+      setTapTimes([])
+      tapTimeoutRef.current = null
+
+      if (len >= 3) {
+        vibrate(60)
+        try {
+          await api.post(`/commands/${encodeURIComponent(userId)}`, {
+            command: 'finishEffect',
+          })
+        } catch (err) {
+          console.error('Failed to send finishEffect', err)
+        }
+      } else if (len === 2) {
+        vibrate(40)
+        try {
+          await api.post(`/commands/${encodeURIComponent(userId)}`, {
+            command: 'screenshot',
+          })
+        } catch (err) {
+          console.error('Failed to send screenshot command', err)
+        }
+      }
+    }, 250)
   }
 
   const handleTouchStart = (e) => {
@@ -163,13 +170,14 @@ export default function PeekScreenPage() {
 
   let heroType = heroSource
   if (!heroType) {
-    if (hasUrl || hasScreenshot) heroType = 'screen'
+    if (hasUrl || hasScreenshot || hasContact) heroType = 'screen'
     else if (hasNote) heroType = 'note'
-    else if (hasContact) heroType = 'contact'
   }
 
   const showCenterPreview =
     revealing && (hasScreenshot || hasUrl || hasNote || hasContact)
+
+  const urlInfo = hasUrl ? parseUrlInfo(screenData.url) : { domain: null, search: null, page: null }
 
   return (
     <div
@@ -181,10 +189,8 @@ export default function PeekScreenPage() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Base is pure black. Only render overlay while revealing */}
       {revealing && (
         <div className="absolute inset-0">
-          {/* Corner note (when not hero and note exists) */}
           {hasNote && heroType !== 'note' && (
             <div className="absolute top-4 left-4 max-w-[45%] text-xs text-neutral-200 bg-black/60 px-2 py-1 rounded-md">
               {noteData?.note_name && (
@@ -200,7 +206,6 @@ export default function PeekScreenPage() {
             </div>
           )}
 
-          {/* Corner contact (when not hero and contact exists) */}
           {hasContact && heroType !== 'contact' && (
             <div className="absolute top-4 right-4 max-w-[45%] text-xs text-right text-neutral-200 bg-black/60 px-2 py-1 rounded-md">
               <div className="font-semibold mb-0.5">Contact</div>
@@ -210,18 +215,54 @@ export default function PeekScreenPage() {
             </div>
           )}
 
-          {/* Center hero */}
+          {hasUrl && heroType !== 'screen' && (urlInfo.search || urlInfo.page || urlInfo.domain) && (
+            <div className="absolute top-16 left-1/2 -translate-x-1/2 max-w-[80%] text-xs text-center text-neutral-200 bg-black/60 px-3 py-2 rounded-md">
+              {urlInfo.search && (
+                <div className="mb-1">
+                  <span className="mr-1">🔍</span>
+                  <span>{urlInfo.search}</span>
+                </div>
+              )}
+              {!urlInfo.search && urlInfo.page && (
+                <div className="mb-1">
+                  <span className="mr-1">📄</span>
+                  <span>{urlInfo.page}</span>
+                </div>
+              )}
+              {urlInfo.domain && (
+                <div>
+                  <span className="mr-1">🌐</span>
+                  <span>{urlInfo.domain}</span>
+                </div>
+              )}
+            </div>
+          )}
+
           {showCenterPreview && (
             <div className="absolute inset-0 flex items-center justify-center px-6">
               <div className="max-w-full max-h-full">
-                {heroType === 'screen' && (hasScreenshot || hasUrl) && (
-                  <div className="rounded-xl border border-neutral-700 bg-neutral-900/70 overflow-hidden max-w-md mx-auto">
-                    {hasUrl && (
-                      <div className="px-3 py-2 border-b border-neutral-800 text-xs text-neutral-300 flex items-center justify-between">
-                        <span className="truncate">{screenData.url}</span>
-                        <span className="ml-2 text-[10px] uppercase text-neutral-500">
-                          Preview
-                        </span>
+                {heroType === 'screen' && (hasScreenshot || hasUrl || hasContact) && (
+                  <div className="rounded-xl border border-neutral-700 bg-neutral-900/70 overflow-hidden max-w-md mx-auto px-4 py-4">
+                    {hasUrl && (urlInfo.search || urlInfo.page || urlInfo.domain) && (
+                      <div className="mb-3 text-sm text-neutral-100 text-center">
+                        {urlInfo.search && (
+                          <div className="mb-1">
+                            <span className="mr-1">🔍</span>
+                            <span>{urlInfo.search}</span>
+                          </div>
+                        )}
+                        {!urlInfo.search && urlInfo.page && (
+                          <div className="mb-1">
+                            <span className="mr-1">📄</span>
+                            <span>{urlInfo.page}</span>
+                          </div>
+                        )}
+                        {urlInfo.domain && (
+                          <div className="text-xs text-neutral-300">
+                            <span className="mr-1">🌐</span>
+                            <span>{urlInfo.domain}</span>
+                          </div>
+                        )}
                       </div>
                     )}
                     {hasScreenshot && (
@@ -233,7 +274,12 @@ export default function PeekScreenPage() {
                         className="block w-full h-auto max-h-[60vh] object-contain bg-black"
                       />
                     )}
-                    {!hasScreenshot && !hasUrl && (
+                    {!hasScreenshot && !hasUrl && hasContact && (
+                      <div className="text-sm text-neutral-200 whitespace-pre-wrap">
+                        {screenData.contact}
+                      </div>
+                    )}
+                    {!hasScreenshot && !hasUrl && !hasContact && (
                       <div className="px-4 py-6 text-center text-sm text-neutral-500">
                         No screen data yet.
                       </div>

@@ -32,7 +32,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="w-full max-w-md mx-auto">
+    <div className="w-full max-w-md mx-auto pt-6">
       <div className="flex items-center justify-between mb-4">
         <button
           onClick={() => navigate('/')}

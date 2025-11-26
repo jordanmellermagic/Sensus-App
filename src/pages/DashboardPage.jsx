@@ -10,9 +10,6 @@ function PillButton({ children, onClick, variant = 'default' }) {
     default:
       base +
       ' bg-neutral-900 border-neutral-700 text-neutral-50 hover:bg-neutral-800',
-    primary:
-      base +
-      ' bg-white border-white text-black hover:bg-neutral-200',
     danger:
       base +
       ' bg-red-700 border-red-500 text-white hover:bg-red-600',
@@ -43,8 +40,8 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="w-full max-w-md mx-auto">
-      <div className="text-center mb-8">
+    <div className="w-full max-w-md mx-auto pt-6">
+      <div className="text-center mb-4">
         <h1 className="text-3xl font-semibold tracking-[0.3em] uppercase mb-1">
           SENSUS
         </h1>
@@ -53,27 +50,35 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="flex justify-center mb-8">
-        <button
-          onClick={logout}
-          className="px-4 py-1.5 rounded-full border border-neutral-700 text-xs text-neutral-300 hover:bg-neutral-800"
-        >
-          Log Out
-        </button>
-      </div>
+      <div className="mt-6">
+        <div className="text-center text-xs uppercase tracking-wide text-neutral-500 mb-3">
+          Peeks
+        </div>
+        <div className="flex justify-center gap-4 mb-8">
+          <PillButton onClick={() => navigate('/peek')}>Peek Screen</PillButton>
+          <PillButton onClick={() => navigate('/spectator-data')}>
+            Spectator Data
+          </PillButton>
+        </div>
 
-      <div className="flex justify-center gap-4 mb-8">
-        <PillButton onClick={() => navigate('/peek')}>Peek Screen</PillButton>
-        <PillButton onClick={() => navigate('/spectator-data')}>
-          Spectator Data
-        </PillButton>
-      </div>
+        <div className="text-center text-xs uppercase tracking-wide text-neutral-500 mb-3">
+          App Controls
+        </div>
+        <div className="flex justify-center gap-4 mb-6">
+          <PillButton onClick={() => navigate('/settings')}>Settings</PillButton>
+          <PillButton variant="danger" onClick={handleResetApp}>
+            Reset App
+          </PillButton>
+        </div>
 
-      <div className="flex flex-col items-center gap-4">
-        <PillButton onClick={() => navigate('/settings')}>Settings</PillButton>
-        <PillButton variant="danger" onClick={handleResetApp}>
-          Reset App
-        </PillButton>
+        <div className="flex justify-center mt-4">
+          <button
+            onClick={logout}
+            className="px-4 py-1.5 rounded-full border border-neutral-700 text-xs text-neutral-300 hover:bg-neutral-800"
+          >
+            Log Out
+          </button>
+        </div>
       </div>
     </div>
   )

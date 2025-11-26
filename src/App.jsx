@@ -14,7 +14,7 @@ function AppShell() {
 
   const containerClass = isPeekScreen
     ? 'w-full h-screen bg-black text-white'
-    : 'min-h-screen bg-black text-white flex items-center justify-center px-4'
+    : 'min-h-screen bg-black text-white px-4 pb-8'
 
   return (
     <div className={containerClass}>

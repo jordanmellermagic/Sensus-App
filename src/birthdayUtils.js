@@ -1,13 +1,11 @@
 export function parseBirthday(birthday) {
   if (!birthday) return null
   const trimmed = String(birthday).trim()
-  // Try YYYY-MM-DD
   const fullMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/)
   if (fullMatch) {
     const [_, y, m, d] = fullMatch
     return { year: Number(y), month: Number(m), day: Number(d) }
   }
-  // Try MM-DD
   const mdMatch = trimmed.match(/^(\d{2})-(\d{2})$/)
   if (mdMatch) {
     const [_, m, d] = mdMatch
@@ -36,7 +34,7 @@ export function getStarSign(month, day) {
   const dateValue = month * 100 + day
   for (let i = 0; i < zodiacs.length - 1; i++) {
     const [sign, sm, sd] = zodiacs[i]
-    const [ , em, ed] = zodiacs[i + 1]
+    const [, em, ed] = zodiacs[i + 1]
     const start = sm * 100 + sd
     const end = em * 100 + ed
     if (dateValue >= start && dateValue <= end) return sign
