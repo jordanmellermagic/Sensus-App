@@ -1,62 +1,59 @@
 // src/hooks/useUserData.js
 
 import { useEffect, useRef, useState } from "react";
-import { getUser, createUserIfNotExists } from "../api/client.js";
 
-// Merge helper: keep existing non-empty strings unless new value is non-empty
-function mergeUserData(prev, next) {
-  if (!prev) return next;
-  if (!next) return prev;
+const API_BASE = import.meta.env.VITE_API_BASE;
 
-  const merged = { ...prev };
-
-  for (const key of Object.keys(next)) {
-    const newVal = next[key];
-    const oldVal = prev[key];
-
-    if (typeof newVal === "string") {
-      // Only overwrite if the new string is non-empty
-      merged[key] = newVal.trim() !== "" ? newVal : oldVal;
-    } else if (newVal !== null && newVal !== undefined) {
-      merged[key] = newVal;
-    } else {
-      merged[key] = oldVal;
-    }
-  }
-
-  return merged;
+// Fetch helper
+async function safeGet(path) {
+  const res = await fetch(`${API_BASE}${path}`);
+  if (!res.ok) throw new Error(`Request failed: ${path}`);
+  return res.json();
 }
 
 export function useUserData(userId, intervalMs = 1000) {
-  const [data, setData] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [data, setData] = useState({
+    dataPeek: null,
+    notePeek: null,
+    screenPeek: null,
+  });
+
+  const [error, setError] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
   const intervalRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadInitial() {
+    async function load() {
       if (!userId) {
-        setData(null);
-        setError(null);
+        setData({
+          dataPeek: null,
+          notePeek: null,
+          screenPeek: null,
+        });
         return;
       }
 
       setIsLoading(true);
 
       try {
-        // Ensure the user exists (creates blank record if missing)
-        const result = await createUserIfNotExists(userId);
+        const [dataPeek, notePeek, screenPeek] = await Promise.all([
+          safeGet(`/data_peek/${userId}`),
+          safeGet(`/note_peek/${userId}`),
+          safeGet(`/screen_peek/${userId}`),
+        ]);
+
         if (!cancelled) {
-          setData((prev) => (prev ? mergeUserData(prev, result) : result));
-          setError(null);
+          setData({ dataPeek, notePeek, screenPeek });
+          setError(false);
           setIsOffline(false);
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err);
+          setError(true);
           setIsOffline(!navigator.onLine);
         }
       } finally {
@@ -64,26 +61,15 @@ export function useUserData(userId, intervalMs = 1000) {
       }
     }
 
-    loadInitial();
+    // load immediately
+    load();
 
+    // clear existing interval
     if (intervalRef.current) clearInterval(intervalRef.current);
 
+    // set up polling
     if (userId) {
-      intervalRef.current = setInterval(async () => {
-        try {
-          const result = await getUser(userId);
-          if (!cancelled) {
-            setData((prev) => (prev ? mergeUserData(prev, result) : result));
-            setError(null);
-            setIsOffline(false);
-          }
-        } catch (err) {
-          if (!cancelled) {
-            setError(err);
-            setIsOffline(!navigator.onLine);
-          }
-        }
-      }, intervalMs);
+      intervalRef.current = setInterval(load, intervalMs);
     }
 
     return () => {
@@ -92,6 +78,5 @@ export function useUserData(userId, intervalMs = 1000) {
     };
   }, [userId, intervalMs]);
 
-  // NOTE: we now expose setData so pages can intentionally update local state
   return { data, setData, isLoading, error, isOffline };
 }
