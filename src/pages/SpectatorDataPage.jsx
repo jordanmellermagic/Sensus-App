@@ -67,7 +67,7 @@ export default function SpectatorDataPage() {
     (extras.hasYear && (extras.daysAlive != null || extras.weekday))
 
   return (
-    <div className="w-full max-w-md mx-auto pt-6">
+    <div className="w-full max-w-md mx-auto pt-6 pb-8">
       <div className="flex items-center justify-between mb-4">
         <button
           onClick={() => navigate('/')}
@@ -87,35 +87,43 @@ export default function SpectatorDataPage() {
         Spectator Data
       </h2>
 
-      <div className="space-y-4 text-sm">
+      <div className="space-y-5 text-sm">
         <div>
-          <div className="text-neutral-500 text-xs uppercase">Full Name</div>
-          <div className="text-neutral-100">
+          <div className="text-neutral-500 text-xs uppercase tracking-wide">
+            Full Name
+          </div>
+          <div className="text-neutral-100 mt-1">
             {formatFullName(data?.first_name, data?.last_name)}
           </div>
         </div>
+
         <div>
-          <div className="text-neutral-500 text-xs uppercase">
+          <div className="text-neutral-500 text-xs uppercase tracking-wide">
             Phone Number
           </div>
-          <div className="text-neutral-100">
+          <div className="text-neutral-100 mt-1">
             {data?.phone_number || '—'}
           </div>
         </div>
+
         <div>
-          <div className="text-neutral-500 text-xs uppercase">Birthday</div>
-          <div className="text-neutral-100 mb-1">{birthdayText}</div>
+          <div className="text-neutral-500 text-xs uppercase tracking-wide">
+            Birthday
+          </div>
+          <div className="text-neutral-100 mt-1">{birthdayText}</div>
+
           {hasExtras && (
             <button
               type="button"
               onClick={() => setShowExtras((v) => !v)}
-              className="text-xs text-neutral-400 hover:text-neutral-200"
+              className="mt-2 text-sm text-neutral-300 hover:text-neutral-100"
             >
               {showExtras ? 'Hide details' : 'Show more details'}
             </button>
           )}
+
           {showExtras && (
-            <div className="mt-2 space-y-1 text-xs text-neutral-200">
+            <div className="mt-3 space-y-1 text-sm text-neutral-200">
               {extras.starSign && (
                 <div>Star sign: {extras.starSign}</div>
               )}
@@ -128,9 +136,14 @@ export default function SpectatorDataPage() {
             </div>
           )}
         </div>
+
         <div>
-          <div className="text-neutral-500 text-xs uppercase">Address</div>
-          <div className="text-neutral-100">{addressText}</div>
+          <div className="text-neutral-500 text-xs uppercase tracking-wide">
+            Address
+          </div>
+          <div className="text-neutral-100 mt-1 whitespace-pre-wrap">
+            {addressText}
+          </div>
         </div>
       </div>
     </div>
