@@ -1,0 +1,29 @@
+/* Remove double-tap zoom */
+html {
+  touch-action: manipulation;
+}
+
+/* Full black background everywhere */
+html, body {
+  margin: 0;
+  background: #000 !important;
+  color: #e5e5e5;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Safe area padding for iOS */
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent iOS auto-zoom on inputs */
+input {
+  font-size: 16px;
+}
