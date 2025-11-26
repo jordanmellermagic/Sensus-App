@@ -4,6 +4,17 @@ import api from '../api.js'
 import { useAuth } from '../authContext.jsx'
 import { parseUrlInfo } from '../urlUtils.js'
 
+function getTs(obj, keys) {
+  if (!obj) return null
+  for (const k of keys) {
+    if (obj[k]) {
+      const t = Date.parse(obj[k])
+      if (!Number.isNaN(t)) return t
+    }
+  }
+  return null
+}
+
 function usePeekData(userId, intervalMs = 1500) {
   const [noteData, setNoteData] = useState(null)
   const [screenData, setScreenData] = useState(null)
@@ -34,43 +45,41 @@ function usePeekData(userId, intervalMs = 1500) {
         const screenChanged =
           JSON.stringify(prevScreen || {}) !== JSON.stringify(screen || {})
 
-        let nextHero = null
+        // Try timestamp-based hero first if available
+        const noteTs = getTs(note, [
+          'note_peek_updated_at',
+          'updated_at',
+          'note_updated_at',
+        ])
+        const screenTs = getTs(screen, [
+          'screen_peek_updated_at',
+          'updated_at',
+        ])
 
-        if (screenChanged) {
-          const ps = prevScreen || {}
-          const changedScreenshot =
-            ps?.screenshot_path !== screen?.screenshot_path &&
-            !!screen?.screenshot_path
-          const changedUrl =
-            ps?.url !== screen?.url &&
-            !!screen?.url
-          const changedContact =
-            ps?.contact !== screen?.contact &&
-            !!screen?.contact
+        let nextHero = heroType
 
-          if (changedScreenshot) nextHero = 'screenshot'
-          else if (changedUrl) nextHero = 'url'
-          else if (changedContact) nextHero = 'contact'
+        if (noteTs || screenTs) {
+          if (noteTs && !screenTs) nextHero = 'note'
+          else if (!noteTs && screenTs) nextHero = 'screen'
+          else if (noteTs && screenTs) {
+            nextHero = noteTs >= screenTs ? 'note' : 'screen'
+          }
+        } else {
+          // Fallback: changed-based
+          if (screenChanged && !noteChanged) nextHero = 'screen'
+          else if (noteChanged && !screenChanged) nextHero = 'note'
+          else if (screenChanged && noteChanged) {
+            // If both changed same poll, prefer screen data by default
+            nextHero = 'screen'
+          }
         }
-
-        if (!nextHero && noteChanged) {
-          const hasNote = !!(note?.note_name || note?.note_body)
-          if (hasNote) nextHero = 'note'
-        }
-
-        if (!nextHero && !heroType) {
-          if (screen?.screenshot_path) nextHero = 'screenshot'
-          else if (screen?.url) nextHero = 'url'
-          else if (screen?.contact) nextHero = 'contact'
-          else if (note?.note_name || note?.note_body) nextHero = 'note'
-        }
-
-        if (nextHero) setHeroType(nextHero)
 
         prevNoteRef.current = note
         prevScreenRef.current = screen
+
         setNoteData(note)
         setScreenData(screen)
+        setHeroType(nextHero)
       } catch (err) {
         console.error('Polling failed', err)
       }
@@ -88,12 +97,15 @@ function usePeekData(userId, intervalMs = 1500) {
 }
 
 function vibrate(pattern = 50) {
-  if (typeof navigator !== 'undefined' && navigator.vibrate) {
-    try {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
       navigator.vibrate(pattern)
-    } catch {
-      // ignore
     }
+    if (typeof window !== 'undefined' && window?.webkit?.messageHandlers?.hapticFeedback) {
+      window.webkit.messageHandlers.hapticFeedback.postMessage('impact')
+    }
+  } catch {
+    // ignore
   }
 }
 
@@ -102,18 +114,73 @@ export default function PeekScreenPage() {
   const navigate = useNavigate()
   const [revealing, setRevealing] = useState(false)
   const [tapTimes, setTapTimes] = useState([])
+  const holdTimerRef = useRef(null)
+  const didRevealRef = useRef(false)
   const tapTimeoutRef = useRef(null)
   const touchStartRef = useRef(null)
   const [isTwoFingerGesture, setIsTwoFingerGesture] = useState(false)
 
   const { noteData, screenData, heroType } = usePeekData(userId)
 
+  const hasNote = !!(noteData?.note_name || noteData?.note_body)
+  const hasUrl = !!screenData?.url
+  const hasContact = !!screenData?.contact
+  const hasScreenshot = !!screenData?.screenshot_path
+
+  // Decide hero representation: note vs url vs contact vs screenshot
+  let effectiveHero = heroType
+  if (!effectiveHero) {
+    if (hasScreenshot) effectiveHero = 'screen'
+    else if (hasUrl || hasContact) effectiveHero = 'screen'
+    else if (hasNote) effectiveHero = 'note'
+  }
+
+  // Inside "screen" hero, choose the primary content
+  let screenHeroKind = null
+  if (effectiveHero === 'screen') {
+    if (hasScreenshot) screenHeroKind = 'screenshot'
+    else if (hasUrl) screenHeroKind = 'url'
+    else if (hasContact) screenHeroKind = 'contact'
+  }
+
+  // If heroType says "note" but note is missing, fall back
+  if (effectiveHero === 'note' && !hasNote) {
+    if (hasScreenshot || hasUrl || hasContact) {
+      effectiveHero = 'screen'
+      if (hasScreenshot) screenHeroKind = 'screenshot'
+      else if (hasUrl) screenHeroKind = 'url'
+      else if (hasContact) screenHeroKind = 'contact'
+    }
+  }
+
+  const urlInfo = hasUrl ? parseUrlInfo(screenData.url) : { domain: null, search: null, page: null }
+  const showAnything = hasNote || hasUrl || hasContact || hasScreenshot
+
+  // --- Press & hold with 120ms delay ---
   const handlePointerDown = () => {
-    setRevealing(true)
+    didRevealRef.current = false
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current)
+    }
+    holdTimerRef.current = setTimeout(() => {
+      didRevealRef.current = true
+      setRevealing(true)
+    }, 120)
   }
 
   const handlePointerUp = () => {
-    setRevealing(false)
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current)
+      holdTimerRef.current = null
+    }
+    // If we were in reveal mode, stop revealing and do NOT count taps
+    if (didRevealRef.current) {
+      didRevealRef.current = false
+      setRevealing(false)
+      return
+    }
+    // Otherwise, treat as tap
+    registerTap()
   }
 
   const registerTap = () => {
@@ -154,6 +221,7 @@ export default function PeekScreenPage() {
     }, 250)
   }
 
+  // Two-finger swipe down to exit
   const handleTouchStart = (e) => {
     if (e.touches.length === 2) {
       setIsTwoFingerGesture(true)
@@ -183,30 +251,11 @@ export default function PeekScreenPage() {
     }
   }
 
-  const hasNote = !!(noteData?.note_name || noteData?.note_body)
-  const hasUrl = !!screenData?.url
-  const hasContact = !!screenData?.contact
-  const hasScreenshot = !!screenData?.screenshot_path
-
-  let effectiveHero = heroType
-  if (!effectiveHero) {
-    if (hasScreenshot) effectiveHero = 'screenshot'
-    else if (hasUrl) effectiveHero = 'url'
-    else if (hasContact) effectiveHero = 'contact'
-    else if (hasNote) effectiveHero = 'note'
-  }
-
-  const urlInfo = hasUrl ? parseUrlInfo(screenData.url) : { domain: null, search: null, page: null }
-
-  const showAnything =
-    hasNote || hasUrl || hasContact || hasScreenshot
-
   return (
     <div
       className="w-full h-screen bg-black text-white relative touch-none select-none"
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
-      onClick={registerTap}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -215,9 +264,10 @@ export default function PeekScreenPage() {
         <div className="absolute inset-0">
           {/* Small fixed positions */}
           {hasNote && effectiveHero !== 'note' && (
-            <div className="absolute top-4 left-4 max-w-[45%] text-xs text-neutral-200 bg-black/70 px-2 py-1 rounded-md">
+            <div className="absolute top-4 left-4 max-w-[45%] text-[13px] text-neutral-200 bg-black/80 px-2 py-1 rounded-md">
+              <div className="font-semibold text-[13px] mb-0.5">Note</div>
               {noteData?.note_name && (
-                <div className="font-semibold mb-0.5">
+                <div className="font-medium mb-0.5">
                   {noteData.note_name}
                 </div>
               )}
@@ -229,8 +279,8 @@ export default function PeekScreenPage() {
             </div>
           )}
 
-          {hasUrl && effectiveHero !== 'url' && (urlInfo.search || urlInfo.page || urlInfo.domain) && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 max-w-[70%] text-xs text-center text-neutral-200 bg-black/70 px-3 py-2 rounded-md">
+          {hasUrl && !(effectiveHero === 'screen' && screenHeroKind === 'url') && (urlInfo.search || urlInfo.page || urlInfo.domain) && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 max-w-[70%] text-[13px] text-center text-neutral-200 bg-black/80 px-3 py-2 rounded-md">
               {urlInfo.search && (
                 <div className="mb-1">
                   <span className="mr-1">🔍</span>
@@ -252,36 +302,36 @@ export default function PeekScreenPage() {
             </div>
           )}
 
-          {hasContact && effectiveHero !== 'contact' && (
-            <div className="absolute top-4 right-4 max-w-[45%] text-xs text-right text-neutral-200 bg-black/70 px-2 py-1 rounded-md">
-              <div className="font-semibold mb-0.5">Contact</div>
+          {hasContact && !(effectiveHero === 'screen' && screenHeroKind === 'contact') && (
+            <div className="absolute top-4 right-4 max-w-[45%] text-[13px] text-right text-neutral-200 bg-black/80 px-2 py-1 rounded-md">
+              <div className="font-semibold mb-0.5 text-[13px]">Contact</div>
               <div className="text-neutral-300 break-words">
                 {screenData.contact}
               </div>
             </div>
           )}
 
-          {hasScreenshot && effectiveHero !== 'screenshot' && (
+          {hasScreenshot && !(effectiveHero === 'screen' && screenHeroKind === 'screenshot') && (
             <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-32">
               <img
                 src={`${api.defaults.baseURL}/screen_peek/${encodeURIComponent(
                   userId,
-                )}/screenshot?thumb=1&ts=${Date.now()}`}
+                )}/screenshot?thumb=1&v=${Date.now()}`}
                 alt="Screen peek"
                 className="w-full h-auto object-contain rounded-md border border-neutral-700 bg-black"
               />
             </div>
           )}
 
-          {/* HERO in center */}
+          {/* HERO in center (medium size ~70% width) */}
           <div className="absolute inset-0 flex items-center justify-center px-6">
             <div className="max-w-[70vw] max-h-[70vh]">
-              {effectiveHero === 'screenshot' && hasScreenshot && (
+              {effectiveHero === 'screen' && screenHeroKind === 'screenshot' && hasScreenshot && (
                 <div className="rounded-xl border border-neutral-700 bg-neutral-900/70 overflow-hidden">
                   <img
                     src={`${api.defaults.baseURL}/screen_peek/${encodeURIComponent(
                       userId,
-                    )}/screenshot?ts=${Date.now()}`}
+                    )}/screenshot?v=${Date.now()}`}
                     alt="Screen peek"
                     className="block w-full h-auto max-h-[70vh] object-contain bg-black"
                   />
@@ -290,8 +340,9 @@ export default function PeekScreenPage() {
 
               {effectiveHero === 'note' && hasNote && (
                 <div className="rounded-xl border border-neutral-700 bg-neutral-900/80 px-4 py-3">
+                  <div className="font-semibold text-sm mb-1">Note</div>
                   {noteData?.note_name && (
-                    <div className="font-semibold mb-1">
+                    <div className="font-semibold mb-1 text-sm">
                       {noteData.note_name}
                     </div>
                   )}
@@ -303,7 +354,7 @@ export default function PeekScreenPage() {
                 </div>
               )}
 
-              {effectiveHero === 'url' && hasUrl && (
+              {effectiveHero === 'screen' && screenHeroKind === 'url' && hasUrl && (
                 <div className="rounded-xl border border-neutral-700 bg-neutral-900/80 px-4 py-3 text-center text-sm text-neutral-100">
                   {urlInfo.search && (
                     <div className="mb-2">
@@ -326,7 +377,7 @@ export default function PeekScreenPage() {
                 </div>
               )}
 
-              {effectiveHero === 'contact' && hasContact && (
+              {effectiveHero === 'screen' && screenHeroKind === 'contact' && hasContact && (
                 <div className="rounded-xl border border-neutral-700 bg-neutral-900/80 px-4 py-3 text-sm text-neutral-200">
                   <div className="font-semibold mb-1">Contact</div>
                   <div className="whitespace-pre-wrap break-words">
