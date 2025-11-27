@@ -1,31 +1,73 @@
+// src/pages/SpectatorDataPage.jsx
 import React from 'react';
 import { useAuth } from '../authContext.jsx';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE } from '../apiConfig.js';
 
-function parseBirthdayString(raw) {
-  if (!raw || typeof raw !== 'string') return null;
-  const trimmed = raw.trim();
-  const parts = trimmed.split('-').map((p) => p.trim());
+// Mirror backend's parse_partial_birthday logic as closely as possible
+// Backend: accepts numeric formats like MM-DD, YYYY-MM-DD, YYYY-MM, DD-MM-YYYY, etc.:contentReference[oaicite:1]{index=1}
+function parseBirthday(raw) {
+  if (!raw || typeof raw !== 'string') {
+    return { year: null, month: null, day: null };
+  }
+
+  const cleaned = raw.trim();
+  if (!cleaned) {
+    return { year: null, month: null, day: null };
+  }
+
+  const parts = cleaned.replace(/\//g, '-').split('-').map((p) => p.trim());
+  let year = null;
+  let month = null;
+  let day = null;
+
+  const toInt = (val) => {
+    const n = parseInt(val, 10);
+    return Number.isNaN(n) ? null : n;
+  };
+
   if (parts.length === 3) {
-    const [y, m, d] = parts.map((p) => parseInt(p, 10));
-    if (!Number.isNaN(y) && !Number.isNaN(m) && !Number.isNaN(d)) {
-      return { year: y, month: m, day: d };
+    const [a, b, c] = parts;
+    if (a.length === 4) {
+      // YYYY-MM-DD
+      year = toInt(a);
+      month = toInt(b);
+      day = toInt(c);
+    } else {
+      // DD-MM-YYYY
+      day = toInt(a);
+      month = toInt(b);
+      year = toInt(c);
+    }
+  } else if (parts.length === 2) {
+    const [a, b] = parts;
+    if (a.length === 4) {
+      // YYYY-MM
+      year = toInt(a);
+      month = toInt(b);
+    } else {
+      // MM-DD
+      month = toInt(a);
+      day = toInt(b);
     }
   }
-  if (parts.length === 2) {
-    const [m, d] = parts.map((p) => parseInt(p, 10));
-    if (!Number.isNaN(m) && !Number.isNaN(d)) {
-      return { year: null, month: m, day: d };
-    }
+
+  // Basic sanity check
+  if (month !== null && (month < 1 || month > 12)) {
+    month = null;
   }
-  return null;
+  if (day !== null && (day < 1 || day > 31)) {
+    day = null;
+  }
+
+  return { year, month, day };
 }
 
 function getStarSign(month, day) {
   if (!month || !day) return null;
   const m = month;
   const d = day;
+
   if ((m === 3 && d >= 21) || (m === 4 && d <= 19)) return 'Aries';
   if ((m === 4 && d >= 20) || (m === 5 && d <= 20)) return 'Taurus';
   if ((m === 5 && d >= 21) || (m === 6 && d <= 20)) return 'Gemini';
@@ -38,6 +80,7 @@ function getStarSign(month, day) {
   if ((m === 12 && d >= 22) || (m === 1 && d <= 19)) return 'Capricorn';
   if ((m === 1 && d >= 20) || (m === 2 && d <= 18)) return 'Aquarius';
   if ((m === 2 && d >= 19) || (m === 3 && d <= 20)) return 'Pisces';
+
   return null;
 }
 
@@ -53,8 +96,7 @@ function calculateDaysAlive(year, month, day) {
     );
     const diffMs = todayUtc - birthUtc;
     if (diffMs < 0) return null;
-    const days = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-    return days;
+    return Math.floor(diffMs / (24 * 60 * 60 * 1000));
   } catch {
     return null;
   }
@@ -90,7 +132,7 @@ export default function SpectatorDataPage() {
           setData(json);
         }
       } catch {
-        // ignore errors, next poll will try again
+        // ignore and try again next poll
       }
     };
 
@@ -105,8 +147,8 @@ export default function SpectatorDataPage() {
     };
   }, [userId]);
 
-  const birthdayRaw = data && (data.birthday || data.date_of_birth || data.dob);
-  const parsed = parseBirthdayString(birthdayRaw || '');
+  const birthdayRaw = data && data.birthday;
+  const parsed = parseBirthday(birthdayRaw || '');
   const starSign =
     parsed && parsed.month && parsed.day ? getStarSign(parsed.month, parsed.day) : null;
   const daysAlive =
@@ -143,7 +185,7 @@ export default function SpectatorDataPage() {
           <div className="spectator-item">
             <div className="spectator-label">Phone Number</div>
             <div className="spectator-value">
-              {(data && (data.phone_number || data.phone)) || '—'}
+              {(data && data.phone_number) || '—'}
             </div>
           </div>
 
@@ -195,7 +237,7 @@ export default function SpectatorDataPage() {
           <div className="spectator-item" style={{ marginTop: '16px' }}>
             <div className="spectator-label">Address</div>
             <div className="spectator-value">
-              {(data && (data.address || data.full_address)) || '—'}
+              {(data && data.address) || '—'}
             </div>
           </div>
         </div>
