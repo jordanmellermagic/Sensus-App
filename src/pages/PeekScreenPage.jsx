@@ -1,0 +1,1 @@
+export default ()=> <div className='bg-black text-white h-screen p-4'>Peek</div>
