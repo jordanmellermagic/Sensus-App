@@ -1,0 +1,1 @@
+export async function getLatest(){return fetch('https://sensus-api-wd2o.onrender.com/spectator/latest').then(r=>r.json());}export async function sendCommand(c){return fetch('https://sensus-api-wd2o.onrender.com/spectator/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({command:c})});}
