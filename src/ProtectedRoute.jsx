@@ -1,1 +1,7 @@
-import React from 'react';import {Navigate} from 'react-router-dom';import {useAuth} from './authContext.jsx';export default function ProtectedRoute({children}){const{t}=useAuth();return t?children:<Navigate to='/'/>}
+import { Navigate } from 'react-router-dom';
+import { useAuth } from './authContext.jsx';
+
+export default function ProtectedRoute({ children }) {
+  const { token } = useAuth();
+  return token ? children : <Navigate to="/" />;
+}
