@@ -1,11 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 
-const AuthContext = createContext({
-  userId: null,
-  loading: true,
-  login: () => {},
-  logout: () => {}
-});
+const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [userId, setUserId] = useState(null);
@@ -35,5 +30,5 @@ export function AuthProvider({ children }) {
 }
 
 export function useAuth() {
-  return useContext(AuthContext);
+  return useContext(AuthContext) || {};
 }
